@@ -1,6 +1,6 @@
 module Extensions
 
-  # Install elasticsearch plugin
+  # Install an Elasticsearch plugin
   #
   # In the simplest form, just pass a plugin name in the GitHub <user>/<repo> format:
   #
@@ -8,14 +8,14 @@ module Extensions
   #
   # You may also optionally pass a version:
   #
-  #     install_plugin 'lukas-vlcek/bigdesk', 'version' => '1.0.0'
+  #     install_plugin 'elasticsearch/elasticsearch-mapper-attachments', 'version' => '1.6.0'
   #
   # ... as well as the URL:
   #
   #     install_plugin 'hunspell', 'url' => 'https://github.com/downloads/.../elasticsearch-analysis-hunspell-1.1.1.zip'
   #
-  # In the provisioning process, you won't be calling this method directly -- you'll configure
-  # plugin names correctly in the role/node attributes or in the data bag.
+  # The "elasticsearch::plugins" recipe will install all plugins listed in
+  # the role/node attributes or in the data bag (`node.elasticsearch.plugins`).
   #
   # Example:
   #
@@ -41,9 +41,12 @@ module Extensions
         Chef::Log.debug command
 
         system command
+
+        # Ensure proper permissions
+        system "chown -R #{node.elasticsearch[:user]}:#{node.elasticsearch[:user]} #{node.elasticsearch[:dir]}/elasticsearch-#{node.elasticsearch[:version]}/plugins/"
       end
 
-      notifies :restart, resources(:service => 'elasticsearch')
+      notifies :restart, 'service[elasticsearch]'
 
       not_if do
         Dir.entries("#{node.elasticsearch[:dir]}/elasticsearch-#{node.elasticsearch[:version]}/plugins/").any? do |plugin|

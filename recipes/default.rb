@@ -1,6 +1,6 @@
-# Load the ElasticSearch extensions
-#
 [Chef::Recipe, Chef::Resource].each { |l| l.send :include, ::Extensions }
+
+Erubis::Context.send(:include, Extensions::Templates)
 
 elasticsearch = "elasticsearch-#{node.elasticsearch[:version]}"
 
@@ -31,8 +31,20 @@ end
 
 # Create ES directories
 #
-%w| conf_path data_path log_path pid_path |.each do |path|
-  directory node.elasticsearch[path.to_sym] do
+[ node.elasticsearch[:path][:conf], node.elasticsearch[:path][:logs], node.elasticsearch[:pid_path] ].each do |path|
+  directory path do
+    owner node.elasticsearch[:user] and group node.elasticsearch[:user] and mode 0755
+    recursive true
+    action :create
+  end
+end
+
+# Create data path directories
+#
+data_paths = node.elasticsearch[:path][:data].is_a?(Array) ? node.elasticsearch[:path][:data] : node.elasticsearch[:path][:data].split(',')
+
+data_paths.each do |path|
+  directory path.strip do
     owner node.elasticsearch[:user] and group node.elasticsearch[:user] and mode 0755
     recursive true
     action :create
@@ -61,7 +73,8 @@ ark "elasticsearch" do
   has_binaries ['bin/elasticsearch', 'bin/plugin']
   checksum node.elasticsearch[:checksum]
 
-  notifies :restart, resources(:service => 'elasticsearch')
+  notifies :start,   'service[elasticsearch]'
+  notifies :restart, 'service[elasticsearch]'
 end
 
 # Increase open file limits
@@ -92,27 +105,32 @@ bash "increase limits for the elasticsearch user" do
   end
 end
 
-
 # Create file with ES environment variables
 #
 template "elasticsearch-env.sh" do
-  path   "#{node.elasticsearch[:conf_path]}/elasticsearch-env.sh"
+  path   "#{node.elasticsearch[:path][:conf]}/elasticsearch-env.sh"
   source "elasticsearch-env.sh.erb"
   owner node.elasticsearch[:user] and group node.elasticsearch[:user] and mode 0755
 
-  notifies :restart, resources(:service => 'elasticsearch')
+  notifies :restart, 'service[elasticsearch]'
 end
 
 # Create ES config file
 #
 template "elasticsearch.yml" do
-  path   "#{node.elasticsearch[:conf_path]}/elasticsearch.yml"
+  path   "#{node.elasticsearch[:path][:conf]}/elasticsearch.yml"
   source "elasticsearch.yml.erb"
   owner node.elasticsearch[:user] and group node.elasticsearch[:user] and mode 0755
 
-  notifies :restart, resources(:service => 'elasticsearch')
+  notifies :restart, 'service[elasticsearch]'
 end
 
-# Make sure the service is started
+# Create ES logging file
 #
-service("elasticsearch") { action :start }
+template "logging.yml" do
+  path   "#{node.elasticsearch[:path][:conf]}/logging.yml"
+  source "logging.yml.erb"
+  owner node.elasticsearch[:user] and group node.elasticsearch[:user] and mode 0755
+
+  notifies :restart, 'service[elasticsearch]'
+end
